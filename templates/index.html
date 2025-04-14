@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tutor</title>
+  <!-- Include Tailwind CSS from CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* Optional: to support the Tailwind-specific h-[600px] height */
+    .h-\[600px\] {
+      height: 600px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-4xl mx-auto px-4 py-4">
+      <div class="flex items-center space-x-2">
+        <!-- Example SVG icon for the graduation cap -->
+        <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 14l-3 3 3 3 3-3-3-3z"></path>
+        </svg>
+        <h1 class="text-2xl font-bold text-gray-900">AI Tutor</h1>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-4xl mx-auto px-4 py-8">
+    <!-- Chat Interface -->
+    <div class="bg-white rounded-lg shadow-sm h-[600px] flex flex-col">
+      <!-- Messages Container -->
+      <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Chat messages will be dynamically inserted here -->
+      </div>
+      <!-- Input Form -->
+      <form id="chat-form" class="p-4 border-t">
+        <div class="flex space-x-4">
+          <input type="text" id="input-message" placeholder="Type your message..."
+                 class="flex-1 rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500" />
+          <button type="submit" id="send-button"
+                  class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+            <!-- Text label for the send button -->
+            <span>Send</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    // Helper function: Create a message element based on message data
+    function createMessageElement(message) {
+      const messageDiv = document.createElement('div');
+      // Align right for user messages; left for AI
+      messageDiv.classList.add('flex', message.role === 'user' ? 'justify-end' : 'justify-start');
+      
+      const innerDiv = document.createElement('div');
+      innerDiv.classList.add('max-w-[80%]', 'rounded-lg', 'p-3');
+      if (message.role === 'user') {
+        innerDiv.classList.add('bg-indigo-600', 'text-white');
+      } else {
+        innerDiv.classList.add('bg-gray-100', 'text-gray-900');
+      }
+      // Split content on newlines to maintain formatting
+      message.content.split('\n').forEach((line, index, arr) => {
+        innerDiv.appendChild(document.createTextNode(line));
+        if (index < arr.length - 1) {
+          innerDiv.appendChild(document.createElement('br'));
+        }
+      });
+      
+      messageDiv.appendChild(innerDiv);
+      return messageDiv;
+    }
+    
+    // Scroll the messages container to the bottom
+    function scrollToBottom() {
+      const container = document.getElementById('messages-container');
+      container.scrollTop = container.scrollHeight;
+    }
+    
+    // Global state
+    const messages = [];
+    const sessionId = Math.random().toString(36).substring(7);
+    let loading = false;
+    
+    // Adds a message to the view and internal state
+    function addMessage(message) {
+      messages.push(message);
+      const container = document.getElementById('messages-container');
+      const messageElement = createMessageElement(message);
+      container.appendChild(messageElement);
+      scrollToBottom();
+    }
+    
+    // Manages the loading state and shows/hides a loading indicator
+    function setLoading(isLoading) {
+      loading = isLoading;
+      const sendButton = document.getElementById('send-button');
+      sendButton.disabled = isLoading;
+      
+      const container = document.getElementById('messages-container');
+      if (isLoading) {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loading-indicator';
+        loadingDiv.classList.add('flex', 'justify-start');
+        const innerDiv = document.createElement('div');
+        innerDiv.classList.add('bg-gray-100', 'rounded-lg', 'p-3', 'flex', 'items-center', 'space-x-2');
+        // Simple text indicator (you can replace or expand with an SVG spinner)
+        innerDiv.innerHTML = '<span>Thinking...</span>';
+        loadingDiv.appendChild(innerDiv);
+        container.appendChild(loadingDiv);
+        scrollToBottom();
+      } else {
+        const loadingDiv = document.getElementById('loading-indicator');
+        if (loadingDiv) {
+          loadingDiv.remove();
+        }
+      }
+    }
+    
+    // Initialize messages once DOM content is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initial welcome message from AI
+      addMessage({
+        role: 'ai',
+        content: 'Welcome to AI Tutor! How can I help you with your learning journey today?'
+      });
+      
+      // Fetch available courses from the API endpoint
+      fetch('http://localhost:5000/api/courses')
+        .then(response => response.json())
+        .then(courses => {
+          const coursesText = courses.map(course => '- ' + course).join('\n');
+          addMessage({
+            role: 'ai',
+            content: `Available courses:\n${coursesText}\n\nPlease type the name of the course you'd like to study.`
+          });
+        })
+        .catch(error => console.error('Error fetching courses:', error));
+      
+      // Attach the submit event listener for the chat form
+      document.getElementById('chat-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const inputField = document.getElementById('input-message');
+        const messageText = inputField.value.trim();
+        if (!messageText) return;
+        
+        // Add user message to the conversation
+        addMessage({
+          role: 'user',
+          content: messageText
+        });
+        inputField.value = '';
+        
+        setLoading(true);
+        try {
+          // POST user message to the API endpoint
+          const response = await fetch('http://localhost:5000/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: messageText,
+              session_id: sessionId
+            }),
+          });
+          const data = await response.json();
+          addMessage({
+            role: 'ai',
+            content: data.response
+          });
+        } catch (error) {
+          console.error('Error sending message:', error);
+          addMessage({
+            role: 'ai',
+            content: 'Sorry, there was an error processing your request. Please try again.'
+          });
+        } finally {
+          setLoading(false);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
